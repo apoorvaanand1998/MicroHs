@@ -32,6 +32,7 @@ import System.IO.Serialize
 import System.IO.TimeMilli
 import MicroHs.TargetConfig
 import Paths_MicroHs(getDataDir)
+import WasmGC.WAT
 
 main :: IO ()
 main = do
@@ -276,6 +277,8 @@ mainCompile flags mn = do
     putStrLn $ "top level defns:      " ++ padLeft 6 (show numOutDefs) ++ " (unpruned " ++ show numDefs ++ ")"
   dumpIf flags Dtoplevel $
     mapM_ (\ (i, e) -> putStrLn $ showIdent i ++ " = " ++ toStringP e "") allDefs
+  dumpIf flags Dwasmgc $
+    mapM_ (\ (i, e) -> putStrLn $ showIdent i ++ " = " ++ emit (toWasmInstrs e)) allDefs
   if runIt flags then do
     unless compiledWithMhs $ do
       error "The -r flag currently only works with mhs"

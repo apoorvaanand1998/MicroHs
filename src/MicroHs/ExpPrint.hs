@@ -1,4 +1,4 @@
-module MicroHs.ExpPrint(toStringCMdl, toStringP, encodeString, combVersion) where
+module MicroHs.ExpPrint(toStringCMdl, toStringP, encodeString, combVersion, toWasmInstrs) where
 import qualified Prelude(); import MHSPrelude
 import Data.Char(ord, chr)
 import qualified MicroHs.IdentMap as M
@@ -11,6 +11,9 @@ import MicroHs.Ident(Ident, showIdent, mkIdent, showSLoc)
 import MicroHs.List(groupSort)
 import MicroHs.State
 import MicroHs.TypeCheck(isInstId)
+import WasmGC.WAT
+import qualified WasmGC.Choreograph as W
+import qualified WasmGC.Identifiers as WIden
 
 -- Version number of combinator file.
 -- Must match version in eval.c.
@@ -85,6 +88,31 @@ toStringP ae =
     Lam _x _e -> undefined -- (("(\\" ++ showIdent x ++ " ") ++) . toStringP e . (")" ++)
     --App f a -> ("(" ++) . toStringP f . (" " ++) . toStringP a . (")" ++)
     App f a -> toStringP f . toStringP a . ("@" ++)
+
+toWasmInstrs :: Exp -> [Instr]
+toWasmInstrs ae =
+  case ae of
+    Var x -> error "Var isn't supported yet"
+    Lit (LStr s) -> error "Whatever LStr is, it isn't supported"
+    Lit (LBStr s) -> error "NOPE"
+    Lit (LInteger _) -> undefined
+    Lit (LRat _) -> undefined
+    Lit (LTick s) -> error "What the fuck is LTick?"
+    Lit (LInt i) -> [ RefI31 i ]
+    Lit (LDouble _) -> undefined
+    Lit (LChar _) -> undefined
+    Lit (LPrim c) -> [ W.prim (c2HsNotation c) ]
+    Lit (LExn _) -> error "Exceptional Exception"
+    Lit (LForImp _ _) -> error "WTF"
+    Lam _x _e -> undefined
+    App f a -> toWasmInstrs f ++ toWasmInstrs a ++ [ StructNew WIden.AppNodeType ] -- toStringP f . toStringP a . ("@" ++)
+
+c2HsNotation :: String -> String
+c2HsNotation "SS"  = "S'"
+c2HsNotation "BB"  = "B'"
+c2HsNotation "CC"  = "C'"
+c2HsNotation "CCB" = "C'B"
+c2HsNotation  x    = x
 
 -- Strings are encoded in a slightly unusal way.
 -- It ensure that (most) printable ASCII only take

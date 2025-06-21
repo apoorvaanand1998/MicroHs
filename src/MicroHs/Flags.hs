@@ -58,7 +58,7 @@ defaultFlags dir = Flags {
   where gmp | dir == "." && wantGMP = ["lib/gmp"]
             | otherwise             = []
 
-data DumpFlag = Dparse | Dderive | Dtypecheck | Ddesugar | Dtoplevel | Dcombinator | Dall
+data DumpFlag = Dparse | Dderive | Dtypecheck | Ddesugar | Dtoplevel | Dwasmgc | Dcombinator | Dall
   deriving (Eq, Show, Enum, Bounded)
 
 dumpIf :: Monad m => Flags -> DumpFlag -> m () -> m ()
