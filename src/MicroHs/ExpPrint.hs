@@ -1,4 +1,4 @@
-module MicroHs.ExpPrint(toStringCMdl, toStringP, encodeString, combVersion, toWasmInstrs) where
+module MicroHs.ExpPrint(toStringCMdl, toStringCMdl2, toStringP, encodeString, combVersion, toWasmInstrs) where
 import qualified Prelude(); import MHSPrelude
 import Data.Char(ord, chr)
 import qualified MicroHs.IdentMap as M
@@ -61,6 +61,47 @@ toStringCMdl (mainName, ds) =
       (n1 : n2 : _) : _ -> errorMessage (getSLoc n1) $ "Duplicate instance " ++ unmangleInst (showIdent n1) ++ " at " ++ showSLoc (getSLoc n2)
       _ -> (ndefs, combVersion ++ show ndefs ++ "\n" ++ res " }")
 
+toStringCMdl2 :: (Ident, [LDef]) -> (Int, String)
+toStringCMdl2 (mainName, ds) =
+  let
+    dMap = M.fromList ds
+    -- Shake the tree bottom-up, serializing nodes as we see them.
+    -- This is much faster than (say) computing the sccs and walking that.
+    dfs :: Ident -> State (Int, M.Map Exp, String -> String) ()
+    dfs n = do
+      (i, seen, r) <- get
+      case M.lookup n seen of
+        Just _ -> return ()
+        Nothing -> do
+          -- Put placeholder for n in seen.
+          put (i, M.insert n (Var n) seen, r)
+          -- Walk n's children
+          let e = findIdentIn n dMap
+          mapM_ dfs $ freeVars e
+          -- Now that n's children are done, compute its actual entry.
+          (i', seen', r') <- get
+          put (i'+1, M.insert n (ref i') seen', def r' (n, i', e))
+    (_,(ndefs, defs, res)) = runState (dfs mainName) (0, M.empty, toWasmInstrs emain)
+    ref i = Var $ mkIdent $ "_" ++ show i
+    findIdentIn n m = fromMaybe (errorMessage (getSLoc n) $ "No definition found for: " ++ showIdent n) $
+                      M.lookup n m
+    findIdent n = findIdentIn n defs
+    emain = findIdent mainName
+    substv aexp =
+      case aexp of
+        Var n -> findIdent n
+        App f a -> App (substv f) (substv a)
+        e -> e
+    def :: (String -> String) -> (Ident, Int, Exp) -> (String -> String)
+    def r (name, i, e) =
+      ("A " ++) . toStringP (substv e) .
+      ((":" ++ show i ++ " (" ++ showIdent name ++ ") " ++ "@\n") ++) .
+      r . ("@" ++)
+  in
+    case dupInstances ds of
+      (n1 : n2 : _) : _ -> errorMessage (getSLoc n1) $ "Duplicate instance " ++ unmangleInst (showIdent n1) ++ " at " ++ showSLoc (getSLoc n2)
+      _ -> (ndefs, combVersion ++ show ndefs ++ "\n" ++ res " }")
+
 dupInstances :: [LDef] -> [[Ident]]
 dupInstances = filter ((> 1) . length) . groupSort . filter isInstId . map fst
 
@@ -89,29 +130,31 @@ toStringP ae =
     --App f a -> ("(" ++) . toStringP f . (" " ++) . toStringP a . (")" ++)
     App f a -> toStringP f . toStringP a . ("@" ++)
 
-toWasmInstrs :: Exp -> [Instr]
+toWasmInstrs :: Exp -> (String -> String)
 toWasmInstrs ae =
   case ae of
-    Var x -> error "Var isn't supported yet"
-    Lit (LStr s) -> error "Whatever LStr is, it isn't supported"
-    Lit (LBStr s) -> error "NOPE"
+    Var x -> (showIdent x ++) . (' ' :)
+    Lit (LStr _) -> error "Whatever LStr is, it isn't supported"
+    Lit (LBStr _) -> error "NOPE"
     Lit (LInteger _) -> undefined
     Lit (LRat _) -> undefined
-    Lit (LTick s) -> error "What the fuck is LTick?"
-    Lit (LInt i) -> [ RefI31 i ]
+    Lit (LTick _) -> error "What the fuck is LTick?"
+    Lit (LInt i) -> (emit [ RefI31 i ] ++) . (' ' :)
     Lit (LDouble _) -> undefined
     Lit (LChar _) -> undefined
-    Lit (LPrim c) -> [ W.prim (c2HsNotation c) ]
+    Lit (LPrim c) -> (emit [ W.prim (c2HsNotation c) ] ++) . (' ' :)
     Lit (LExn _) -> error "Exceptional Exception"
     Lit (LForImp _ _) -> error "WTF"
     Lam _x _e -> undefined
-    App f a -> toWasmInstrs f ++ toWasmInstrs a ++ [ StructNew WIden.AppNodeType ] -- toStringP f . toStringP a . ("@" ++)
-
+    App f a -> ((toWasmInstrs f) "" ++ ) .
+               ((toWasmInstrs a) "" ++ ) .
+               (emit [ StructNew WIden.AppNodeType ] ++ ) . (' ' :)
+               
 c2HsNotation :: String -> String
-c2HsNotation "SS"  = "S'"
-c2HsNotation "BB"  = "B'"
-c2HsNotation "CC"  = "C'"
-c2HsNotation "CCB" = "C'B"
+c2HsNotation "S'"  = "SS"
+c2HsNotation "B'"  = "BB"
+c2HsNotation "C'"  = "CC"
+c2HsNotation "C'B" = "CCB"
 c2HsNotation  x    = x
 
 -- Strings are encoded in a slightly unusal way.

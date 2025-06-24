@@ -272,13 +272,14 @@ mainCompile flags mn = do
     mainName = qualIdent rmn (mkIdent "main")
     cmdl = (mainName, allDefs)
     (numOutDefs, outData) = toStringCMdl cmdl
+    (_, outData2) = toStringCMdl2 cmdl
     numDefs = length allDefs
   when (verbosityGT flags 0) $
     putStrLn $ "top level defns:      " ++ padLeft 6 (show numOutDefs) ++ " (unpruned " ++ show numDefs ++ ")"
   dumpIf flags Dtoplevel $
     mapM_ (\ (i, e) -> putStrLn $ showIdent i ++ " = " ++ toStringP e "") allDefs
   dumpIf flags Dwasmgc $
-    mapM_ (\ (i, e) -> putStrLn $ showIdent i ++ " = " ++ emit (toWasmInstrs e)) allDefs
+    mapM_ (\ (i, e) -> putStrLn $ showIdent i ++ " = " ++ toWasmInstrs e "") allDefs
   if runIt flags then do
     unless compiledWithMhs $ do
       error "The -r flag currently only works with mhs"
@@ -310,6 +311,8 @@ mainCompile flags mn = do
       writeFile outFile outData
      else if outFile `hasTheExtension` ".c" then
       writeFile outFile cCode
+     else if outFile `hasTheExtension` ".comb2" then
+      writeFile outFile outData2
      else do
        (fn, h) <- openTmpFile "mhsc.c"
        let ppkgs = map fst $ getPathPkgs cash

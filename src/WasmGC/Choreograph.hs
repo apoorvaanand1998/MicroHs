@@ -60,7 +60,7 @@ fromVal (VRef s)    = [LocalGet s]
 fromVal (VRec g)    = toWatInstr g
 
 prim :: String -> Instr
-prim x = maybe (error "Unknown PrimComb or PrimOp") RefI31 (elemIndex x combs)
+prim x = maybe (error ("Unknown PrimComb or PrimOp " ++ x)) RefI31 (elemIndex x combs)
 
 -- stores non-reduced fields in variables
 store :: Field -> Identifier -> [Instr]
